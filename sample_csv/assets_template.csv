@@ -1,0 +1,3 @@
+asset_tag,name,category,department_code,location_name,condition,serial_number,purchase_date,notes
+FAC-100,Office Chair,Furniture,FAC,Main Building,GOOD,CH-1001,2025-01-10,Ergonomic chair
+PW-200,Chainsaw,Tools,PW,Public Works Yard,NEEDS_REPAIR,CS-9988,2024-11-02,Needs new chain
