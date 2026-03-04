@@ -1,17 +1,24 @@
+
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+_default_demo_lock = "1" if DEBUG else "0"
+DEMO_DATA_LOCKED = os.getenv("DEMO_DATA_LOCKED", _default_demo_lock) == "1"
 # ------------------------------------------------------------------------------
 # CORE SETTINGS
 # ------------------------------------------------------------------------------
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-secret")
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY is not set in .env — refusing to start.")
 
-DEV_KEY = os.getenv("DEV_KEY", "")
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost 127.0.0.1").split()
+
+DEV_KEY        = os.getenv("DEV_KEY", "")
+DEV_ACCESS_CODE = os.getenv("DEV_ACCESS_CODE", "")
 
 # ------------------------------------------------------------------------------
 # APPLICATIONS
@@ -28,6 +35,7 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "django_filters",
+    "corsheaders",
 
     # Local apps
     "common",
@@ -48,13 +56,10 @@ LOGOUT_REDIRECT_URL = "/api-auth/login/"
 # MIDDLEWARE
 # ------------------------------------------------------------------------------
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",                          # ← must be first
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-
-    # Capture current user for audit logs
     "common.middleware.CurrentRequestMiddleware",
-
-
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -66,11 +71,10 @@ MIDDLEWARE = [
 # URLS / WSGI
 # ------------------------------------------------------------------------------
 ROOT_URLCONF = "countyinv.urls"
-
 WSGI_APPLICATION = "countyinv.wsgi.application"
 
 # ------------------------------------------------------------------------------
-# TEMPLATES (needed for Django Admin + DRF browsable API)
+# TEMPLATES
 # ------------------------------------------------------------------------------
 TEMPLATES = [
     {
@@ -94,11 +98,13 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "countyinv"),
-        "USER": os.getenv("DB_USER", ""),
+        "NAME":     os.getenv("DB_NAME",     "countyinv"),
+        "USER":     os.getenv("DB_USER",     ""),
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "HOST":     os.getenv("DB_HOST",     "localhost"),
+        "PORT":     os.getenv("DB_PORT",     "5432"),
+        # Keep connections alive for 60s in production; 0 = close per-request in dev
+        "CONN_MAX_AGE": 0 if DEBUG else 60,
     }
 }
 
@@ -116,21 +122,24 @@ AUTH_PASSWORD_VALIDATORS = [
 # INTERNATIONALIZATION
 # ------------------------------------------------------------------------------
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "America/New_York"
-USE_I18N = True
-USE_TZ = True
+TIME_ZONE     = "America/New_York"
+USE_I18N      = True
+USE_TZ        = True
 
 # ------------------------------------------------------------------------------
 # STATIC FILES
 # ------------------------------------------------------------------------------
-STATIC_URL = "/static/"
+STATIC_URL  = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"   # needed for collectstatic on deploy
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ------------------------------------------------------------------------------
 # DJANGO REST FRAMEWORK
 # ------------------------------------------------------------------------------
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],  # no authentication
+    # No session/token auth — role driven by custom headers
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
@@ -139,37 +148,114 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+
+    # ── Pagination ──────────────────────────────────────────────────────────
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+
+    # ── Throttling ───────────────────────────────────────────────────────────
+    # Enabled in all environments so developers experience realistic limits.
+    # Higher caps in DEBUG prevent test friction while still exercising the code path.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "3000/hour" if DEBUG else "300/hour",
+        "user": "10000/hour" if DEBUG else "2000/hour",
+    },
 }
 
 # ------------------------------------------------------------------------------
-# CSRF / CORS (React dev server)
+# CORS  (django-cors-headers)
 # ------------------------------------------------------------------------------
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+_cors_raw = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173 http://127.0.0.1:5173")
+CORS_ALLOWED_ORIGINS = _cors_raw.split()
+CORS_ALLOW_CREDENTIALS = False          # no cookies
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "content-type",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-acting-role",                    # custom role header
+    "x-dept-code",                      # custom dept header
+    "x-username",                       # request attribution header (sent by api.js interceptor)
+    "x-dev-key",                        # dev panel key
 ]
 
-CSRF_COOKIE_HTTPONLY = False
-CSRF_COOKIE_SAMESITE = "Lax"
+# ------------------------------------------------------------------------------
+# CSRF / SESSION
+# ------------------------------------------------------------------------------
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173 http://127.0.0.1:5173"
+).split()
+
+CSRF_COOKIE_HTTPONLY  = True   # JS cannot steal CSRF token via XSS
+CSRF_COOKIE_SAMESITE  = "Lax"
 SESSION_COOKIE_SAMESITE = "Lax"
 
 # ------------------------------------------------------------------------------
-# DEVELOPER ACCESS (SECRET CODE)
+# SECURITY HEADERS  (only enforce in production)
 # ------------------------------------------------------------------------------
-# Used by DevCodeAuthentication
-DEV_ACCESS_CODE = os.getenv("DEV_ACCESS_CODE", "")
-DEV_KEY = os.getenv("DEV_KEY", "") 
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER        = True
+    SECURE_CONTENT_TYPE_NOSNIFF       = True
+    X_FRAME_OPTIONS                   = "DENY"
+    SECURE_HSTS_SECONDS               = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS    = True
+    SECURE_SSL_REDIRECT               = True
+    SESSION_COOKIE_SECURE             = True
+    CSRF_COOKIE_SECURE                = True
+
 # ------------------------------------------------------------------------------
-# LOGGING (helpful during development)
+# DEVELOPER ACCESS
+# ------------------------------------------------------------------------------
+DEV_USERNAME    = os.getenv("DEV_USERNAME", "devadmin")
+DEV_PASSWORD    = os.getenv("DEV_PASSWORD", "")   # required in .env
+
+# ------------------------------------------------------------------------------
+# LOGGING
 # ------------------------------------------------------------------------------
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "dev": {
+            "format": "[{levelname}] {asctime} {module}: {message}",
+            "style": "{",
+        },
+        "prod": {
+            # Structured single-line format — easy to ingest into log aggregators
+            "format": "level={levelname} time={asctime} module={module} msg={message}",
+            "style": "{",
+        },
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "dev" if DEBUG else "prod",
+        },
     },
     "root": {
         "handlers": ["console"],
         "level": "DEBUG" if DEBUG else "INFO",
+    },
+    "loggers": {
+        "django.db.backends": {
+            "level": "WARNING",   # suppress SQL query spam
+            "handlers": ["console"],
+            "propagate": False,
+        },
+        "inventory": {
+            "level": "DEBUG" if DEBUG else "INFO",
+            "handlers": ["console"],
+            "propagate": False,
+        },
+        "accounts": {
+            "level": "DEBUG" if DEBUG else "INFO",
+            "handlers": ["console"],
+            "propagate": False,
+        },
     },
 }

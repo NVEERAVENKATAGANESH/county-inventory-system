@@ -1,0 +1,148 @@
+/**
+ * components/ThemeSwitcher.jsx
+ *
+ * A floating theme picker. Drop it anywhere — Navbar, Settings, wherever.
+ *
+ * Usage:
+ *   import ThemeSwitcher from "../components/ThemeSwitcher";
+ *   <ThemeSwitcher />
+ */
+import { useState, useRef, useEffect } from "react";
+import { useTheme } from "../context/ThemeContext";
+import { THEMES } from "../theme";
+import { Palette } from "lucide-react";
+
+const css = `
+.ts-wrap { position: relative; display: inline-block; }
+
+.ts-trigger {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12.5px; font-weight: 500;
+  font-family: inherit; cursor: pointer;
+  transition: all 0.15s;
+}
+.ts-trigger:hover {
+  border-color: var(--border-md);
+  color: var(--text);
+  background: var(--bg-panel2);
+}
+.ts-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  flex-shrink: 0;
+}
+
+.ts-menu {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: 220px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-md);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  z-index: 999;
+  animation: ts-in 0.15s ease;
+}
+@keyframes ts-in {
+  from { opacity:0; transform:translateY(-6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.ts-label {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text-dim); padding: 4px 8px 8px;
+}
+
+.ts-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 9px;
+  cursor: pointer; transition: background 0.12s;
+  border: 1px solid transparent;
+  font-family: inherit; background: transparent;
+  width: 100%; text-align: left;
+}
+.ts-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.ts-item.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-glow);
+}
+
+.ts-swatches {
+  display: flex; gap: 3px; flex-shrink: 0;
+}
+.ts-swatch {
+  width: 12px; height: 12px; border-radius: 50%;
+}
+
+.ts-item-name {
+  font-size: 13px; font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+.ts-item.active .ts-item-name { color: var(--accent); }
+
+.ts-check {
+  font-size: 12px; color: var(--accent);
+  opacity: 0; transition: opacity 0.1s;
+}
+.ts-item.active .ts-check { opacity: 1; }
+`;
+
+export default function ThemeSwitcher() {
+  const { theme, setTheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="ts-wrap" ref={ref}>
+        <button className="ts-trigger" onClick={() => setOpen((v) => !v)}>
+          <span className="ts-dot" />
+          <Palette size={13} />
+          Theme
+        </button>
+
+        {open && (
+          <div className="ts-menu">
+            <div className="ts-label">Choose theme</div>
+            {Object.values(THEMES).map((t) => (
+              <button
+                key={t.id}
+                className={`ts-item${theme === t.id ? " active" : ""}`}
+                onClick={() => { setTheme(t.id); setOpen(false); }}
+              >
+                <div className="ts-swatches">
+                  {t.preview.map((c, i) => (
+                    <div key={i} className="ts-swatch" style={{ background: c }} />
+                  ))}
+                </div>
+                <span className="ts-item-name">{t.label}</span>
+                <span className="ts-check">✓</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

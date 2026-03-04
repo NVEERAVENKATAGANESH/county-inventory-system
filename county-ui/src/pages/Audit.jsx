@@ -1,238 +1,326 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+/**
+ * Audit.jsx — Rewritten for full theme support
+ * All colors use CSS variables from app.css — works with all 4 themes.
+ * Font sizes upgraded throughout.
+ */
+import { useEffect, useState, useCallback } from "react";
+import { api,  fmtApiError } from "../api";
 import { useSearch } from "../context/SearchContext.jsx";
+import Pagination from "../components/Pagination.jsx";
+import { RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+const css = `
+@keyframes pg-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.pg { font-family:'DM Sans',system-ui,sans-serif; color:var(--text); animation:pg-in .28s cubic-bezier(.16,1,.3,1); }
+.pg-hdr { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+.pg-title { font-size:26px; font-weight:700; color:var(--page-title); letter-spacing:-.5px; margin:0; }
+.pg-sub { font-size:14px; color:var(--page-sub); margin:4px 0 0; }
+.pg-acts { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.pg-btn {
+  padding:9px 16px; border-radius:10px; font-size:14px; font-weight:500;
+  font-family:inherit; cursor:pointer; transition:all .13s;
+  border:1px solid var(--page-btn-border); background:var(--page-btn-bg); color:var(--page-btn-text);
+  display:inline-flex; align-items:center; gap:7px;
+}
+.pg-btn:hover { border-color:var(--border-md); color:var(--text); background:var(--bg-panel2); }
+.pg-btn:disabled { opacity:.4; cursor:not-allowed; }
+.pg-btn.ghost { background:transparent; border-color:transparent; color:var(--page-sub); font-size:13px; }
+.pg-btn.ghost:hover { background:var(--bg-panel2); color:var(--text); border-color:var(--border); }
+.pg-btn.sm { padding:6px 12px; font-size:12.5px; border-radius:8px; }
+.pg-filters { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }
+.pg-sel {
+  background:var(--page-input-bg); border:1px solid var(--page-card-border);
+  border-radius:9px; padding:9px 13px; color:var(--page-input-text);
+  font-size:14px; font-family:inherit; outline:none; transition:border-color .15s;
+}
+.pg-sel:focus { border-color:var(--border-focus); }
+.pg-sel option { background:var(--page-input-bg); color:var(--page-input-text); }
+.pg-err  { background:var(--red-dim);   border:1px solid var(--red-dim);   border-radius:10px; padding:10px 15px; font-size:14px; color:var(--red-text);   margin-bottom:16px; }
+.pg-list { display:grid; gap:8px; }
+.pg-item { background:var(--page-card-bg); border:1px solid var(--page-card-border); border-radius:13px; overflow:hidden; transition:border-color .13s; }
+.pg-item:hover { border-color:var(--border-md); }
+.pg-item-main { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:15px 18px; flex-wrap:wrap; cursor:pointer; }
+.pg-item-left { display:flex; align-items:flex-start; gap:12px; flex:1; min-width:0; }
+.pg-ico { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; margin-top:1px; }
+.pg-ico.CREATE { background:var(--green-dim);  color:var(--green-text); }
+.pg-ico.UPDATE { background:var(--blue-dim);   color:var(--blue-text);  }
+.pg-ico.DELETE { background:var(--red-dim);    color:var(--red-text);   }
+.pg-item-meta { display:flex; align-items:center; gap:8px; margin-bottom:5px; flex-wrap:wrap; }
+.pg-bdg { display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; font-family:'DM Mono',monospace; border:1px solid transparent; white-space:nowrap; }
+.pg-bdg.CREATE    { background:var(--green-dim);  color:var(--green-text);  border-color:var(--green-dim);  }
+.pg-bdg.UPDATE    { background:var(--blue-dim);   color:var(--blue-text);   border-color:var(--blue-dim);   }
+.pg-bdg.DELETE    { background:var(--red-dim);    color:var(--red-text);    border-color:var(--red-dim);    }
+.pg-bdg.ASSET     { background:var(--purple-dim); color:var(--purple-text); border-color:var(--purple-dim); }
+.pg-bdg.CONSUMABLE{ background:var(--amber-dim);  color:var(--amber-text);  border-color:var(--amber-dim);  }
+.pg-eid { font-family:'DM Mono',monospace; font-size:12px; color:var(--page-sub); }
+.pg-summary { font-size:15px; color:var(--page-td-name); margin-top:2px; }
+.pg-when { font-size:12px; color:var(--page-sub); margin-top:4px; font-family:'DM Mono',monospace; }
+.pg-chevron { color:var(--page-th-text); flex-shrink:0; margin-top:4px; }
+.pg-detail { padding:15px 18px; background:var(--bg-panel2); border-top:1px solid var(--page-card-border); }
+.pg-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media(max-width:640px){.pg-detail-grid{grid-template-columns:1fr;}}
+.pg-detail-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--page-th-text); margin-bottom:8px; }
+.pg-pre {
+  margin:0; padding:12px 14px; border-radius:10px; border:1px solid var(--page-card-border);
+  background:var(--page-card-bg); overflow:auto; white-space:pre-wrap;
+  font-size:12px; color:var(--page-td-text); font-family:'DM Mono',monospace; line-height:1.7; max-height:200px;
+}
+.pg-skel { background:var(--page-card-bg); border:1px solid var(--page-card-border); border-radius:13px; padding:15px 18px; animation:skel 1.5s ease-in-out infinite; }
+.pg-skel-bar { height:12px; border-radius:4px; background:var(--page-skel); margin-bottom:8px; }
+.pg-skel-bar.w60{width:60%;} .pg-skel-bar.w40{width:40%;}
+.pg-empty { background:var(--page-card-bg); border:1px solid var(--page-card-border); border-radius:13px; padding:48px; text-align:center; color:var(--page-empty); font-size:15px; }
+.pg-pagination { display:flex; align-items:center; gap:12px; justify-content:center; margin-top:18px; font-size:14px; color:var(--page-sub); }
+@keyframes skel{0%,100%{opacity:.45}50%{opacity:.85}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{animation:spin .9s linear infinite;}
+`;
+
+const ACT_ICON = { CREATE:"✦", UPDATE:"↺", DELETE:"✕" };
+const PAGE_SIZE = 25;
+
+/** Compute field-level diff between before and after objects */
+function computeDiff(before, after) {
+  const b = before || {};
+  const a = after  || {};
+  const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(a)]))
+    .filter(k => !k.startsWith("_")); // skip internal meta keys
+  return keys.map(k => ({
+    key:     k,
+    before:  b[k],
+    after:   a[k],
+    changed: JSON.stringify(b[k]) !== JSON.stringify(a[k]),
+    added:   !(k in b) && k in a,
+    removed: k in b && !(k in a),
+  }));
+}
+
+function fmtVal(v) {
+  if (v === null || v === undefined) return <em style={{ color:"var(--text-dim)", fontStyle:"italic" }}>null</em>;
+  if (typeof v === "object") return <span>{JSON.stringify(v)}</span>;
+  return <span>{String(v)}</span>;
+}
+
+function DiffViewer({ before, after, action }) {
+  if (action === "CREATE") {
+    // Only show "after" values on create
+    const entries = Object.entries(after || {}).filter(([k]) => !k.startsWith("_"));
+    return (
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:"'DM Mono',monospace" }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--page-th-text)", width:"35%", borderBottom:"1px solid var(--page-card-border)" }}>Field</th>
+            <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--green-text)", borderBottom:"1px solid var(--page-card-border)" }}>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([k, v]) => (
+            <tr key={k}>
+              <td style={{ padding:"3px 8px", color:"var(--page-sub)" }}>{k}</td>
+              <td style={{ padding:"3px 8px", color:"var(--green-text)" }}>{fmtVal(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  if (action === "DELETE") {
+    const entries = Object.entries(before || {}).filter(([k]) => !k.startsWith("_"));
+    return (
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:"'DM Mono',monospace" }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--page-th-text)", width:"35%", borderBottom:"1px solid var(--page-card-border)" }}>Field</th>
+            <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--red-text)", borderBottom:"1px solid var(--page-card-border)" }}>Deleted Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([k, v]) => (
+            <tr key={k}>
+              <td style={{ padding:"3px 8px", color:"var(--page-sub)" }}>{k}</td>
+              <td style={{ padding:"3px 8px", color:"var(--red-text)", textDecoration:"line-through" }}>{fmtVal(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  // UPDATE — show only changed fields
+  const diff = computeDiff(before, after);
+  const changed = diff.filter(d => d.changed);
+  if (!changed.length) return <div style={{ fontSize:12, color:"var(--text-dim)", padding:"8px 0" }}>No field changes detected.</div>;
+  return (
+    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:"'DM Mono',monospace" }}>
+      <thead>
+        <tr>
+          <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--page-th-text)", width:"28%", borderBottom:"1px solid var(--page-card-border)" }}>Field</th>
+          <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--red-text)", width:"36%", borderBottom:"1px solid var(--page-card-border)" }}>Before</th>
+          <th style={{ textAlign:"left", padding:"4px 8px", color:"var(--green-text)", borderBottom:"1px solid var(--page-card-border)" }}>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        {changed.map(d => (
+          <tr key={d.key} style={{ background: "var(--bg-hover)" }}>
+            <td style={{ padding:"4px 8px", color:"var(--page-sub)", fontWeight:600 }}>{d.key}</td>
+            <td style={{ padding:"4px 8px", color:"var(--red-text)" }}>{fmtVal(d.before)}</td>
+            <td style={{ padding:"4px 8px", color:"var(--green-text)" }}>{fmtVal(d.after)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 export default function Audit() {
   const { query } = useSearch();
-  const globalNeedle = query.trim().toLowerCase();
 
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-  const [items, setItems] = useState([]);
+  const [entityType, setEntityType] = useState("");
+  const [action,     setAction]     = useState("");
+  const [page,       setPage]       = useState(1);
+  const [items,      setItems]      = useState([]);
+  const [total,      setTotal]      = useState(0);
+  const [loading,    setLoading]    = useState(true);
+  const [err,        setErr]        = useState("");
+  const [expanded,   setExpanded]   = useState(null);
 
-  // local filters (extra narrowing)
-  const [entityType, setEntityType] = useState(""); // ASSET / CONSUMABLE
-  const [action, setAction] = useState(""); // CREATE / UPDATE / DELETE
-  const [expandedKey, setExpandedKey] = useState(null);
-
-  const pretty = (obj) => {
-    if (!obj) return "";
-    try {
-      return JSON.stringify(obj, null, 2);
-    } catch {
-      return String(obj);
-    }
-  };
-
-  const normalizeList = (data) => {
-    const list = data?.results ?? data ?? [];
-    if (!Array.isArray(list)) return [];
-    return list.map((x, idx) => ({
-      ...x,
-      __key:
-        x.id ??
-        `${x.entity_type ?? "?"}-${x.entity_id ?? "?"}-${x.timestamp ?? x.created_at ?? "?"}-${idx}`,
-    }));
-  };
-
-  async function load() {
-    setLoading(true);
-    setErr("");
-    try {
-      const res = await api.get("/api/auditlogs/?ordering=-timestamp");
-      setItems(normalizeList(res.data));
-    } catch (e) {
-      const msg =
-        e?.response?.data?.detail ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Failed to load audit logs";
-      setErr(msg);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
+  function pretty(obj) {
+    if (!obj) return "(empty)";
+    try { return JSON.stringify(obj, null, 2); } catch { return String(obj); }
+  }
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    try { return new Date(ts).toLocaleString(); } catch { return ts; }
   }
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const params = { ordering:"-timestamp", page, page_size:PAGE_SIZE };
+      if (entityType)   params.entity_type = entityType;
+      if (action)       params.action      = action;
+      if (query.trim()) params.search      = query.trim();
 
-  const filtered = useMemo(() => {
-    const needle = globalNeedle;
+      const res  = await api.get("/api/auditlogs/", { params });
+      const data = res.data;
+      if (data?.results) {
+        setItems(data.results.map((x, i) => ({ ...x, __key: x.id ?? i })));
+        setTotal(data.count ?? data.results.length);
+      } else {
+        const list = Array.isArray(data) ? data : [];
+        setItems(list.map((x, i) => ({ ...x, __key: x.id ?? i })));
+        setTotal(list.length);
+      }
+    } catch (e) {
+      setItems([]); setTotal(0);
+      setErr(fmtApiError(e));
+    } finally { setLoading(false); }
+  }, [entityType, action, page, query]);
 
-    return items.filter((x) => {
-      const okType = !entityType || x.entity_type === entityType;
-      const okAction = !action || x.action === action;
+  useEffect(() => { setPage(1); }, [entityType, action, query]);
+  useEffect(() => { load(); }, [load]);
 
-      const okGlobal =
-        !needle ||
-        String(x.summary || "").toLowerCase().includes(needle) ||
-        String(x.entity_id || "").toLowerCase().includes(needle) ||
-        String(x.changed_by_username || "").toLowerCase().includes(needle) ||
-        String(x.action || "").toLowerCase().includes(needle) ||
-        String(x.entity_type || "").toLowerCase().includes(needle);
-
-      return okType && okAction && okGlobal;
-    });
-  }, [items, entityType, action, globalNeedle]);
 
   return (
-    <div className="panel">
-      <div className="panelHeader">
-        <div>
-          <h2>Audit Logs</h2>
-          <p>
-            Global search comes from the navbar.
-            {query ? (
-              <span style={{ opacity: 0.75 }}>
-                {" "}
-                · Filter: <b>{query}</b>
-              </span>
-            ) : null}
-          </p>
-        </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn" onClick={load} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-
-          <button
-            className="btn"
-            onClick={() => {
-              setEntityType("");
-              setAction("");
-              setExpandedKey(null);
-            }}
-          >
-            Clear Filters
-          </button>
-        </div>
-      </div>
-
-      {/* Filters row */}
-      <div className="formRow" style={{ marginBottom: 14 }}>
-        <select value={entityType} onChange={(e) => setEntityType(e.target.value)}>
-          <option value="">All entity types</option>
-          <option value="ASSET">ASSET</option>
-          <option value="CONSUMABLE">CONSUMABLE</option>
-        </select>
-
-        <select value={action} onChange={(e) => setAction(e.target.value)}>
-          <option value="">All actions</option>
-          <option value="CREATE">CREATE</option>
-          <option value="UPDATE">UPDATE</option>
-          <option value="DELETE">DELETE</option>
-        </select>
-      </div>
-
-      {loading && (
-        <div style={{ display: "grid", gap: 10 }}>
-          <div className="card"><div style={{ opacity: 0.75 }}>Loading audit logs…</div></div>
-          <div className="card"><div style={{ opacity: 0.75 }}>Loading audit logs…</div></div>
-          <div className="card"><div style={{ opacity: 0.75 }}>Loading audit logs…</div></div>
-        </div>
-      )}
-
-      {!loading && err && (
-        <div className="badge warn" style={{ marginBottom: 12 }}>
-          {err}
-          <div style={{ marginTop: 10 }}>
-            <button className="btn" onClick={load}>Try again</button>
+    <>
+      <style>{css}</style>
+      <div className="pg">
+        <div className="pg-hdr">
+          <div>
+            <h1 className="pg-title">Audit Logs</h1>
+            <p className="pg-sub">
+              {total} event{total !== 1 ? "s" : ""} total
+              {query ? ` · searching "${query}"` : ""}
+            </p>
+          </div>
+          <div className="pg-acts">
+            <button className="pg-btn" onClick={load} disabled={loading}>
+              <RefreshCw size={14} className={loading ? "spinning" : ""} />
+              {loading ? "Loading…" : "Refresh"}
+            </button>
+            <button className="pg-btn ghost" onClick={() => { setEntityType(""); setAction(""); setExpanded(null); }}>
+              Clear Filters
+            </button>
           </div>
         </div>
-      )}
 
-      {!loading && !err && filtered.length === 0 && (
-        <div className="badge" style={{ opacity: 0.85 }}>
-          No audit logs found for the current filters/search.
+        <div className="pg-filters">
+          <select className="pg-sel" value={entityType} onChange={e => { setEntityType(e.target.value); setPage(1); }}>
+            <option value="">All entity types</option>
+            <option value="ASSET">ASSET</option>
+            <option value="CONSUMABLE">CONSUMABLE</option>
+            <option value="MAINTENANCE">MAINTENANCE</option>
+            <option value="REQUEST">REQUEST</option>
+          </select>
+          <select className="pg-sel" value={action} onChange={e => { setAction(e.target.value); setPage(1); }}>
+            <option value="">All actions</option>
+            <option value="CREATE">CREATE</option>
+            <option value="UPDATE">UPDATE</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+          {(entityType || action) && (
+            <span style={{ fontSize:13, color:"var(--page-sub)" }}>
+              Filtering by: {[entityType, action].filter(Boolean).join(", ")}
+            </span>
+          )}
         </div>
-      )}
+        {err    && <div className="pg-err">{err}<button className="pg-btn sm" style={{ marginLeft:10 }} onClick={load}>Retry</button></div>}
 
-      {!loading && !err && filtered.length > 0 && (
-        <div style={{ display: "grid", gap: 10 }}>
-          {filtered.map((x) => {
-            const isOpen = expandedKey === x.__key;
-
-            const when = x.timestamp || x.created_at || "-";
-            const who = x.changed_by_username || "system";
-            const summary = x.summary || "(no summary)";
-            const actionLabel = x.action || "-";
-            const typeLabel = x.entity_type || "-";
-            const entityId = x.entity_id ?? "-";
-
-            return (
-              <div key={x.__key} className="card">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontSize: 13, opacity: 0.85 }}>
-                      <span className="badge ok">{actionLabel}</span>{" "}
-                      <span style={{ opacity: 0.8 }}>·</span>{" "}
-                      <b>{typeLabel}</b>{" "}
-                      <span style={{ opacity: 0.8 }}>·</span>{" "}
-                      entity_id: <b>{entityId}</b>
-                    </div>
-
-                    <div style={{ marginTop: 6, fontSize: 15 }}>{summary}</div>
-
-                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-                      {when} · by {who}
-                    </div>
-                  </div>
-
-                  <button
-                    className="btn"
-                    onClick={() => setExpandedKey(isOpen ? null : x.__key)}
-                    style={{ alignSelf: "start" }}
-                  >
-                    {isOpen ? "Hide details" : "View details"}
-                  </button>
-                </div>
-
-                {isOpen && (
-                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>Before</div>
-                      <pre
-                        style={{
-                          margin: 0,
-                          padding: 12,
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(0,0,0,0.25)",
-                          overflow: "auto",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {pretty(x.before) || "(empty)"}
-                      </pre>
-                    </div>
-
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>After</div>
-                      <pre
-                        style={{
-                          margin: 0,
-                          padding: 12,
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(0,0,0,0.25)",
-                          overflow: "auto",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {pretty(x.after) || "(empty)"}
-                      </pre>
-                    </div>
-                  </div>
-                )}
+        {loading ? (
+          <div style={{ display:"grid", gap:8 }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} className="pg-skel">
+                <div className="pg-skel-bar w60" /><div className="pg-skel-bar w40" />
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="pg-empty">No audit logs found for the current filters.</div>
+        ) : (
+          <>
+            <div className="pg-list">
+              {items.map(x => {
+                const isOpen = expanded === x.__key;
+                return (
+                  <div key={x.__key} className="pg-item">
+                    <div className="pg-item-main" onClick={() => setExpanded(isOpen ? null : x.__key)}>
+                      <div className="pg-item-left">
+                        <div className={`pg-ico ${x.action}`}>{ACT_ICON[x.action] || "·"}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div className="pg-item-meta">
+                            <span className={`pg-bdg ${x.action}`}>{x.action}</span>
+                            <span className={`pg-bdg ${x.entity_type}`}>{x.entity_type}</span>
+                            <span className="pg-eid">{x.entity_id}</span>
+                            {x.department_code && <span className="pg-eid" style={{ color:"var(--page-th-text)" }}>· {x.department_code}</span>}
+                          </div>
+                          <div className="pg-summary">{x.summary || "(no summary)"}</div>
+                          <div className="pg-when">{fmtTime(x.timestamp || x.created_at)} · by {x.changed_by_username || "system"}</div>
+                        </div>
+                      </div>
+                      <div className="pg-chevron">
+                        {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <div className="pg-detail">
+                        <div className="pg-detail-lbl" style={{ marginBottom:10 }}>Changes</div>
+                        <DiffViewer before={x.before} after={x.after} action={x.action} />
+                        {/* Raw JSON toggle */}
+                        <details style={{ marginTop:12 }}>
+                          <summary style={{ fontSize:12, color:"var(--page-sub)", cursor:"pointer", userSelect:"none" }}>Show raw JSON</summary>
+                          <div className="pg-detail-grid" style={{ marginTop:10 }}>
+                            <div><div className="pg-detail-lbl">Before</div><pre className="pg-pre">{pretty(x.before)}</pre></div>
+                            <div><div className="pg-detail-lbl">After</div><pre className="pg-pre">{pretty(x.after)}</pre></div>
+                          </div>
+                        </details>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <Pagination page={page} totalCount={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+          </>
+        )}
+      </div>
+    </>
   );
 }

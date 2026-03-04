@@ -1,0 +1,315 @@
+/**
+ * LowStock.jsx — Rewritten for full theme support
+ *
+ * Changes:
+ *  - Removed hardcoded black CSS block entirely
+ *  - All colors now use CSS variables from app.css (--page-card-bg, --page-title, etc.)
+ *  - Font sizes bumped: title 22→28px, body 13→15px, stat values 26→36px
+ *  - Works instantly with light/dark/graphite/ocean theme toggle
+ */
+import { useEffect, useMemo, useState, useRef } from "react";
+import { api, isAdmin,  fmtApiError } from "../api";
+import { useSearch } from "../context/SearchContext.jsx";
+import { RefreshCw, AlertTriangle, Pencil, Check, X } from "lucide-react";
+const css = `
+@keyframes ls-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.ls { font-family: 'DM Sans', system-ui, sans-serif; color: var(--text); animation:ls-in .28s cubic-bezier(.16,1,.3,1); }
+.ls-hdr { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+.ls-title { font-size:26px; font-weight:700; color:var(--page-title); letter-spacing:-.5px; margin:0; }
+.ls-sub { font-size:14px; color:var(--page-sub); margin:4px 0 0; }
+.ls-btn {
+  padding:9px 16px; border-radius:10px; font-size:14px; font-weight:500;
+  font-family:inherit; cursor:pointer; transition:all .13s;
+  border:1px solid var(--page-btn-border); background:var(--page-btn-bg); color:var(--page-btn-text);
+  display:inline-flex; align-items:center; gap:7px;
+}
+.ls-btn:hover { border-color:var(--border-md); color:var(--text); background:var(--bg-panel2); }
+.ls-banner {
+  background:var(--red-dim); border:1px solid var(--red-dim); border-radius:12px;
+  padding:13px 16px; margin-bottom:22px; display:flex; align-items:center;
+  gap:10px; font-size:15px; color:var(--red-text);
+}
+.ls-demo {
+  background:var(--amber-dim); border:1px solid var(--amber-dim); border-radius:10px;
+  padding:10px 15px; font-size:14px; color:var(--amber-text); margin-bottom:18px;
+}
+.ls-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:22px; }
+@media(max-width:600px) { .ls-stats { grid-template-columns:1fr; } }
+.ls-stat {
+  background:var(--page-card-bg); border:1px solid var(--page-card-border);
+  border-radius:14px; padding:16px 20px;
+  display:flex; align-items:center; gap:14px;
+}
+.ls-stat-ico { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ls-stat-val { font-size:30px; font-weight:700; color:var(--page-stat-val); font-family:'DM Mono',monospace; letter-spacing:-1.5px; line-height:1; }
+.ls-stat-val.warn { color:var(--red-text); }
+.ls-stat-val.amber { color:var(--amber-text); }
+.ls-stat-lbl { font-size:11px; color:var(--page-stat-lbl); margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+.ls-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px; }
+.ls-card {
+  background:var(--page-card-bg); border:1px solid var(--red-dim);
+  border-radius:14px; padding:18px 20px; transition:border-color .15s;
+}
+.ls-card:hover { border-color:var(--red-text); }
+.ls-card.crit { border-color:var(--red-text); background:var(--red-dim); }
+.ls-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.ls-card-sku { font-family:'DM Mono',monospace; font-size:12px; color:var(--purple-text); margin-bottom:4px; }
+.ls-card-name { font-size:16px; font-weight:600; color:var(--page-td-name); }
+.ls-card-meta { font-size:13px; color:var(--page-sub); margin-top:3px; }
+.ls-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ls-icon.crit { background:var(--red-dim); color:var(--red-text); }
+.ls-icon.warn { background:var(--amber-dim); color:var(--amber-text); }
+.ls-bar-wrap { margin-bottom:12px; }
+.ls-bar-labels { display:flex; justify-content:space-between; margin-bottom:6px; align-items:flex-end; }
+.ls-bar-qty { font-family:'DM Mono',monospace; font-size:26px; font-weight:700; color:var(--red-text); letter-spacing:-1px; }
+.ls-bar-hint { font-size:13px; color:var(--page-sub); }
+.ls-bar-track { height:7px; background:var(--bg-panel2); border-radius:999px; overflow:hidden; }
+.ls-bar-fill { height:100%; border-radius:999px; transition:width .3s ease; }
+.ls-bar-fill.crit { background:var(--red-text); }
+.ls-bar-fill.warn { background:var(--amber-text); }
+.ls-card-foot { font-size:13px; color:var(--page-sub); font-weight:500; }
+.ls-empty {
+  background:var(--page-card-bg); border:1px solid var(--page-card-border);
+  border-radius:14px; padding:56px; text-align:center; color:var(--page-empty); font-size:16px;
+}
+.ls-empty-icon { font-size:36px; margin-bottom:12px; }
+.ls-supplier-chip {
+  display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px;
+  font-size:11px; font-weight:600; background:var(--bg-panel2);
+  color:var(--page-sub); border:1px solid var(--page-card-border); white-space:nowrap;
+}
+.ls-units-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
+.ls-units-needed { font-size:13px; font-weight:600; }
+.ls-units-needed.warn { color:var(--amber-text); }
+.ls-units-needed.crit { color:var(--red-text); }
+`;
+
+function InlineReorderEditor({ item, onSaved, onSaveError }) {
+  const admin = isAdmin();
+  const [editing, setEditing] = useState(false);
+  const [val,     setVal]     = useState(String(item.reorder_level));
+  const [saving,  setSaving]  = useState(false);
+  const inputRef = useRef(null);
+
+  if (!admin) return null;
+
+  function startEdit() { setVal(String(item.reorder_level)); setEditing(true); setTimeout(() => inputRef.current?.select(), 30); }
+  function cancel()    { setEditing(false); }
+
+  async function save() {
+    const n = parseInt(val, 10);
+    if (isNaN(n) || n < 0) { cancel(); return; }
+    setSaving(true);
+    try {
+      await api.patch(`/api/consumables/${item.id}/`, { reorder_level: n });
+      setEditing(false);
+      onSaved(item.id, n);
+    } catch (err) {
+      const msg = err?.response?.data?.detail || "Failed to save reorder level.";
+      onSaveError?.(msg);
+    }
+    setSaving(false);
+  }
+
+  function onKey(e) {
+    if (e.key === "Enter")  save();
+    if (e.key === "Escape") cancel();
+  }
+
+  if (editing) return (
+    <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:8 }}>
+      <span style={{ fontSize:12, color:"var(--page-sub)" }}>Reorder at:</span>
+      <input
+        ref={inputRef}
+        type="number" min="0"
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={onKey}
+        disabled={saving}
+        style={{
+          width:64, padding:"3px 7px", borderRadius:7, fontSize:13,
+          background:"var(--page-input-bg)", border:"1px solid var(--border-focus)",
+          color:"var(--page-input-text)", fontFamily:"'DM Mono',monospace",
+          outline:"none",
+        }}
+      />
+      <button onClick={save} disabled={saving}
+        style={{ background:"var(--green-dim)", border:"none", borderRadius:6, padding:"4px 7px", cursor:"pointer", color:"var(--green-text)", display:"flex" }}>
+        <Check size={13}/>
+      </button>
+      <button onClick={cancel}
+        style={{ background:"var(--red-dim)", border:"none", borderRadius:6, padding:"4px 7px", cursor:"pointer", color:"var(--red-text)", display:"flex" }}>
+        <X size={13}/>
+      </button>
+    </div>
+  );
+
+  return (
+    <button onClick={startEdit}
+      style={{
+        marginTop:8, background:"none", border:"1px solid var(--page-card-border)",
+        borderRadius:7, padding:"3px 9px", fontSize:12, color:"var(--page-sub)",
+        cursor:"pointer", display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit",
+      }}
+      title="Edit reorder level">
+      <Pencil size={11}/> Edit reorder level
+    </button>
+  );
+}
+
+export default function LowStock() {
+  const { query } = useSearch();
+  const q = query.trim().toLowerCase();
+
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
+
+  function handleReorderSaved(id, newLevel) {
+    setRows(prev =>
+      prev
+        .map(r => r.id === id ? { ...r, reorder_level: newLevel } : r)
+        // Remove from list if threshold was lowered to at or below current stock
+        .filter(r => r.quantity_on_hand <= r.reorder_level)
+    );
+  }
+
+  async function load() {
+    setLoading(true); setError("");
+    if (, ()) {
+      setRows(DEMO); setIsDemo(true); setLoading(false); return;
+    }
+    try {
+      const res  = await api.get("/api/consumables/low-stock/");
+      const data = res.data?.results ?? (Array.isArray(res.data) ? res.data : []);
+      setRows(data);
+      setIsDemo(false);
+    } catch (err) {
+      setRows([]); setIsDemo(false);
+      setError(fmtApiError(err));
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = useMemo(() => {
+    const base = !q ? rows : rows.filter(r =>
+      [r.sku, r.name, r.category, r.supplier, r.department_code]
+        .some(v => (v || "").toLowerCase().includes(q))
+    );
+    // Sort by urgency ratio ascending (most critical first)
+    return [...base].sort((a, b) =>
+      (a.quantity_on_hand / Math.max(1, a.reorder_level)) -
+      (b.quantity_on_hand / Math.max(1, b.reorder_level))
+    );
+  }, [rows, q]);
+
+  const critical = filtered.filter(r => r.quantity_on_hand <= Math.floor(r.reorder_level * 0.4));
+  const warning  = filtered.filter(r => r.quantity_on_hand >  Math.floor(r.reorder_level * 0.4));
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="ls">
+        <div className="ls-hdr">
+          <div>
+            <h1 className="ls-title">Low Stock</h1>
+            <p className="ls-sub">Items at or below reorder level · {filtered.length} alert{filtered.length !== 1 ? "s" : ""}{q ? ` matching "${q}"` : ""}</p>
+          </div>
+          <button className="ls-btn" onClick={load}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+
+        {filtered.length > 0 && (
+          <div className="ls-banner">
+            <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+            <span><strong>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</strong> need restocking — {critical.length} critical, {warning.length} warning.</span>
+          </div>
+        )}
+
+        <div className="ls-stats">
+          <div className="ls-stat">
+            <div className="ls-stat-ico" style={{background:"var(--red-dim)"}}><AlertTriangle size={18} style={{color:"var(--red-text)"}}/></div>
+            <div>
+              <div className={`ls-stat-val${filtered.length > 0 ? " warn" : ""}`}>{filtered.length}</div>
+              <div className="ls-stat-lbl">Low Stock Alerts</div>
+            </div>
+          </div>
+          <div className="ls-stat">
+            <div className="ls-stat-ico" style={{background:"var(--red-dim)"}}><AlertTriangle size={18} style={{color:"var(--red-text)"}}/></div>
+            <div>
+              <div className="ls-stat-val warn">{critical.length}</div>
+              <div className="ls-stat-lbl">Critical (&lt;40%)</div>
+            </div>
+          </div>
+          <div className="ls-stat">
+            <div className="ls-stat-ico" style={{background:"var(--amber-dim)"}}><AlertTriangle size={18} style={{color:"var(--amber-text)"}}/></div>
+            <div>
+              <div className="ls-stat-val amber">{warning.length}</div>
+              <div className="ls-stat-lbl">Warning Level</div>
+            </div>
+          </div>
+        </div>
+
+        {isDemo && <div className="ls-demo">⚠ Backend unavailable — showing demo data.</div>}
+        {error  && <div className="ls-demo" style={{ color: "var(--red-text)" }}>{error}</div>}
+
+        {loading ? (
+          <div className="ls-empty"><div className="ls-empty-icon">⏳</div>Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="ls-empty">
+            <div className="ls-empty-icon">{q ? "🔍" : "✅"}</div>
+            {q ? `No low-stock items matching "${q}".` : "All stock levels are healthy — nothing needs restocking."}
+          </div>
+        ) : (
+          <div className="ls-cards">
+            {filtered.map(r => {
+              const pct    = Math.min(100, Math.round((r.quantity_on_hand / r.reorder_level) * 100));
+              const isCrit = r.quantity_on_hand <= Math.floor(r.reorder_level * 0.4);
+              return (
+                <div key={r.id ?? r.sku} className={`ls-card${isCrit ? " crit" : ""}`}>
+                  <div className="ls-card-top">
+                    <div>
+                      <div className="ls-card-sku">{r.sku}</div>
+                      <div className="ls-card-name">{r.name}</div>
+                      <div className="ls-card-meta" style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:5, alignItems:"center" }}>
+                        <span>{r.category || "—"}</span>
+                        {r.supplier && <span className="ls-supplier-chip">{r.supplier}</span>}
+                        {r.department_code && <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11 }}>{r.department_code}</span>}
+                      </div>
+                    </div>
+                    <div className={`ls-icon ${isCrit ? "crit" : "warn"}`}>
+                      <AlertTriangle size={16} />
+                    </div>
+                  </div>
+                  <div className="ls-bar-wrap">
+                    <div className="ls-bar-labels">
+                      <div>
+                        <span className="ls-bar-qty">{r.quantity_on_hand}</span>
+                        <span style={{ fontSize: 13, color: "var(--page-sub)", marginLeft: 6 }}>in stock</span>
+                      </div>
+                      <span className="ls-bar-hint">reorder at {r.reorder_level}</span>
+                    </div>
+                    <div className="ls-bar-track">
+                      <div className={`ls-bar-fill ${isCrit ? "crit" : "warn"}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="ls-units-row">
+                    <div className={`ls-units-needed ${isCrit ? "crit" : "warn"}`}>
+                      {isCrit ? "⚡" : "⚠"} {r.reorder_level - r.quantity_on_hand} unit{r.reorder_level - r.quantity_on_hand !== 1 ? "s" : ""} needed
+                    </div>
+                    <div className="ls-card-foot">
+                      {isCrit ? "Order immediately" : "Below threshold"}
+                    </div>
+                  </div>
+                  <InlineReorderEditor item={r} onSaved={handleReorderSaved} onSaveError={setError} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
