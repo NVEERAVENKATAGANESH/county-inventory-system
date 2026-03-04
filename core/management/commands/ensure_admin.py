@@ -19,7 +19,6 @@ class Command(BaseCommand):
 
         User = get_user_model()
 
-        # If username exists, ensure it's staff + superuser
         user = User.objects.filter(username=username).first()
         if user:
             changed = False
@@ -35,21 +34,10 @@ class Command(BaseCommand):
 
             if changed:
                 user.save()
-                self.stdout.write(self.style.SUCCESS(
-                    f"Updated existing user '{username}' to be admin."
-                ))
+                self.stdout.write(self.style.SUCCESS(f"Updated '{username}' to admin."))
             else:
-                self.stdout.write(self.style.SUCCESS(
-                    f"Admin user '{username}' already exists."
-                ))
+                self.stdout.write(self.style.SUCCESS(f"Admin '{username}' already exists."))
             return
 
-        # Create new admin user
-        User.objects.create_superuser(
-            username=username,
-            email=email or "",
-            password=password,
-        )
-        self.stdout.write(self.style.SUCCESS(
-            f"Created admin user '{username}'."
-        ))
+        User.objects.create_superuser(username=username, email=email or "", password=password)
+        self.stdout.write(self.style.SUCCESS(f"Created admin '{username}'."))
