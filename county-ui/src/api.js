@@ -37,8 +37,15 @@ export function fmtApiError(err) {
   return `HTTP ${status}`;
 }
 
+/**
+ * ✅ API base:
+ * - Local dev: VITE_API_BASE=""  -> use Vite proxy (/api -> localhost:8000)
+ * - Production (Vercel): set VITE_API_BASE="https://county-inventory-system.onrender.com"
+ */
+const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+
 export const api = axios.create({
-  baseURL: "",
+  baseURL: API_BASE,
   withCredentials: false,
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
@@ -65,17 +72,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (error) => {
-    if (error.response) {
-      error.displayMessage = fmtApiError(error);
-      if (error.response.status === 403) showToast("Access denied.", "error");
-    }
+    error.displayMessage = fmtApiError(error);
+    if (error?.response?.status === 403) showToast("Access denied.", "error");
     return Promise.reject(error);
   }
 );
 
-// Dev API client (DevPanel)
+// Dev API client (DevPanel) — ✅ use same API_BASE
 export const devApi = axios.create({
-  baseURL: "",
+  baseURL: API_BASE,
   withCredentials: false,
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
@@ -90,13 +95,13 @@ devApi.interceptors.request.use((config) => {
     config.headers["X-Username"]    = devUser || devKey;
   }
 
-  // Dev calls are allowed anyway, but we keep it consistent:
   if (isSeedUnlocked() && isDevSessionActive()) {
     config.headers["X-Demo-Unlock"] = "1";
   }
 
   return config;
 });
+
 /* ─────────────────────────────────────────────────────────────
  * Portal session helpers (required by ProtectedRoute/Login/Navbar)
  * ───────────────────────────────────────────────────────────── */
