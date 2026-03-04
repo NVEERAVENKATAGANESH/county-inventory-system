@@ -168,12 +168,12 @@ REST_FRAMEWORK = {
 # ------------------------------------------------------------------------------
 _cors_raw = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173 http://127.0.0.1:5173 https://nveeravenkataganesh.github.io"
+    "http://localhost:5173 http://127.0.0.1:5173 https://nveeravenkataganesh.github.io https://county-inventory-system.vercel.app"
 )
 
 CORS_ALLOWED_ORIGINS = _cors_raw.split()
 
-CORS_ALLOW_CREDENTIALS = False  # no cookies
+CORS_ALLOW_CREDENTIALS = True  # allow cookies
 
 CORS_ALLOW_HEADERS = [
     "accept",
