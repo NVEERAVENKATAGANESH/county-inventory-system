@@ -17,7 +17,7 @@ function isDevSessionActive() {
   return (Date.now() - t) / 60000 <= DEV_TTL_MINUTES;
 }
 
-// Toast hook (your app already references this)
+// Toast hook
 let _toastFn = null;
 export function registerToast(fn) { _toastFn = fn; }
 export function showToast(message, type = "info") { if (_toastFn) _toastFn(message, type); }
@@ -44,6 +44,7 @@ export function fmtApiError(err) {
  */
 const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
 
+/** Main API client (portal) */
 export const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
@@ -59,7 +60,7 @@ api.interceptors.request.use((config) => {
   config.headers["X-Username"]    = username;
   if (dept) config.headers["X-Dept-Code"] = dept;
 
-  // ✅ Seed unlock headers (portal UI)
+  // Seed unlock headers
   if (isSeedUnlocked() && isDevSessionActive()) {
     config.headers["X-Demo-Unlock"] = "1";
     const devKey = (localStorage.getItem("devKey") || "").trim();
@@ -78,7 +79,7 @@ api.interceptors.response.use(
   }
 );
 
-// Dev API client (DevPanel) — ✅ use same API_BASE
+/** Dev API client (DevPanel) */
 export const devApi = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
@@ -103,7 +104,7 @@ devApi.interceptors.request.use((config) => {
 });
 
 /* ─────────────────────────────────────────────────────────────
- * Portal session helpers (required by ProtectedRoute/Login/Navbar)
+ * Portal session helpers
  * ───────────────────────────────────────────────────────────── */
 
 export function isPortalLoggedIn() {
