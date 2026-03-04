@@ -36,9 +36,12 @@ export function fmtApiError(err) {
   }
   return `HTTP ${status}`;
 }
+const API_BASE = import.meta.env.VITE_API_BASE || ""; 
+// local: "" -> uses /api with Vite proxy
+// prod: set VITE_API_BASE=https://your-backend.onrender.com
 
 export const api = axios.create({
-  baseURL: "",
+  baseURL: API_BASE,
   withCredentials: false,
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
@@ -75,7 +78,7 @@ api.interceptors.response.use(
 
 // Dev API client (DevPanel)
 export const devApi = axios.create({
-  baseURL: "",
+  baseURL: API_BASE,
   withCredentials: false,
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
