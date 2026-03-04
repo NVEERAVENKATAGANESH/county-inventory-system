@@ -1,11 +1,12 @@
 
 from pathlib import Path
 import os
+import dj_database_url
 from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+DEBUG = os.getenv("DEBUG", "1") == "1"
 _default_demo_lock = "1" if DEBUG else "0"
 DEMO_DATA_LOCKED = os.getenv("DEMO_DATA_LOCKED", _default_demo_lock) == "1"
 # ------------------------------------------------------------------------------
@@ -15,7 +16,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("DJANGO_SECRET_KEY is not set in .env — refusing to start.")
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost 127.0.0.1").split()
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 DEV_KEY        = os.getenv("DEV_KEY", "")
 DEV_ACCESS_CODE = os.getenv("DEV_ACCESS_CODE", "")
@@ -56,8 +57,9 @@ LOGOUT_REDIRECT_URL = "/api-auth/login/"
 # MIDDLEWARE
 # ------------------------------------------------------------------------------
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",                          # ← must be first
-    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+"django.middleware.security.SecurityMiddleware",
+"whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "common.middleware.CurrentRequestMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -96,16 +98,10 @@ TEMPLATES = [
 # DATABASE
 # ------------------------------------------------------------------------------
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME":     os.getenv("DB_NAME",     "countyinv"),
-        "USER":     os.getenv("DB_USER",     ""),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST":     os.getenv("DB_HOST",     "localhost"),
-        "PORT":     os.getenv("DB_PORT",     "5432"),
-        # Keep connections alive for 60s in production; 0 = close per-request in dev
-        "CONN_MAX_AGE": 0 if DEBUG else 60,
-    }
+    "default": dj_database_url.config(
+        default=f"postgresql://{os.getenv('DB_USER','')}:{os.getenv('DB_PASSWORD','')}@{os.getenv('DB_HOST','localhost')}:{os.getenv('DB_PORT','5432')}/{os.getenv('DB_NAME','countyinv')}",
+        conn_max_age=0 if DEBUG else 60,
+    )
 }
 
 # ------------------------------------------------------------------------------
@@ -129,8 +125,9 @@ USE_TZ        = True
 # ------------------------------------------------------------------------------
 # STATIC FILES
 # ------------------------------------------------------------------------------
-STATIC_URL  = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"   # needed for collectstatic on deploy
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -169,20 +166,25 @@ REST_FRAMEWORK = {
 # ------------------------------------------------------------------------------
 # CORS  (django-cors-headers)
 # ------------------------------------------------------------------------------
-_cors_raw = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173 http://127.0.0.1:5173")
+_cors_raw = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173 http://127.0.0.1:5173 https://nveeravenkataganesh.github.io"
+)
+
 CORS_ALLOWED_ORIGINS = _cors_raw.split()
-CORS_ALLOW_CREDENTIALS = False          # no cookies
+
+CORS_ALLOW_CREDENTIALS = False  # no cookies
+
 CORS_ALLOW_HEADERS = [
     "accept",
     "content-type",
     "x-csrftoken",
     "x-requested-with",
-    "x-acting-role",                    # custom role header
-    "x-dept-code",                      # custom dept header
-    "x-username",                       # request attribution header (sent by api.js interceptor)
-    "x-dev-key",                        # dev panel key
+    "x-acting-role",   # custom role header
+    "x-dept-code",     # custom dept header
+    "x-username",      # request attribution header
+    "x-dev-key",       # dev panel key
 ]
-
 # ------------------------------------------------------------------------------
 # CSRF / SESSION
 # ------------------------------------------------------------------------------
