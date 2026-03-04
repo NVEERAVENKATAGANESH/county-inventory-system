@@ -1,11 +1,25 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState, useEffect, useRef } from "react";
 
 const SearchCtx = createContext(null);
 
 export function SearchProvider({ children }) {
-  const [query, setQuery] = useState("");
+  // rawQuery  — value bound to the input (instant)
+  // query     — debounced value consumed by pages (300ms delay)
+  const [rawQuery, setRawQuery] = useState("");
+  const [query,    setQuery]    = useState("");
+  const timerRef = useRef(null);
 
-  const value = useMemo(() => ({ query, setQuery }), [query]);
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setQuery(rawQuery), 300);
+    return () => clearTimeout(timerRef.current);
+  }, [rawQuery]);
+
+  const value = useMemo(
+    () => ({ query, rawQuery, setQuery: setRawQuery }),
+    [query, rawQuery]
+  );
+
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }
 

@@ -1,49 +1,79 @@
 import axios from "axios";
 
-/**
- * New design:
- * - No backend authentication (no sessions, no CSRF)
- * - Frontend portal login is purely client-side (localStorage)
- * - Authorization behavior is driven by headers:
- *    X-Acting-Role: admin | employee
- *    X-Dept-Code:  Department.code (required for employee reads)
- *
- * Dev-only endpoints (optional):
- *    X-Dev-Key: localStorage.devKey (only used by devApi)
- */
+export function getRole()     { return (localStorage.getItem("actingRole") || "employee").toLowerCase(); }
+export function getDept()     { return (localStorage.getItem("deptCode") || "").trim().toUpperCase(); }
+export function getUsername() { return localStorage.getItem("username") || "User"; }
+export function isAdmin()     { return getRole() === "admin"; }
 
-// ----------------------------
-// Main API client (normal pages)
-// ----------------------------
+export function isSeedUnlocked() {
+  return localStorage.getItem("FF_SEED_UNLOCK") === "true";
+}
+
+const DEV_TTL_MINUTES = 30;
+function isDevSessionActive() {
+  const key = (localStorage.getItem("devKey") || "").trim();
+  const t   = parseInt(localStorage.getItem("devKeyTime") || "0", 10);
+  if (!key || !t) return false;
+  return (Date.now() - t) / 60000 <= DEV_TTL_MINUTES;
+}
+
+// Toast hook (your app already references this)
+let _toastFn = null;
+export function registerToast(fn) { _toastFn = fn; }
+export function showToast(message, type = "info") { if (_toastFn) _toastFn(message, type); }
+
+export function fmtApiError(err) {
+  if (!err?.response) return err?.message || "Network error — is the Django server running?";
+  const { status, data } = err.response;
+  if (!data) return `HTTP ${status}`;
+  if (typeof data === "string") return `HTTP ${status}: ${data}`;
+  if (data?.detail) return `HTTP ${status}: ${data.detail}`;
+  if (typeof data === "object") {
+    const lines = Object.entries(data)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+      .join("\n");
+    return `HTTP ${status}:\n${lines}`;
+  }
+  return `HTTP ${status}`;
+}
+
 export const api = axios.create({
-  baseURL: "",            // Vite proxy -> Django
-  withCredentials: false, // no cookies
+  baseURL: "",
+  withCredentials: false,
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
 
 api.interceptors.request.use((config) => {
-  const role = (localStorage.getItem("actingRole") || "employee").toLowerCase();
-  const dept = (localStorage.getItem("deptCode") || "").trim().toLowerCase();
+  const role     = getRole();
+  const dept     = getDept();
+  const username = getUsername();
 
   config.headers["X-Acting-Role"] = role;
+  config.headers["X-Username"]    = username;
+  if (dept) config.headers["X-Dept-Code"] = dept;
 
-  if (role === "employee") {
-    if (!dept) {
-      return Promise.reject(
-        new Error("Employee role requires Department Code. Please login again.")
-      );
-    }
-    config.headers["X-Dept-Code"] = dept;
-  } else if (dept) {
-    config.headers["X-Dept-Code"] = dept;
+  // ✅ Seed unlock headers (portal UI)
+  if (isSeedUnlocked() && isDevSessionActive()) {
+    config.headers["X-Demo-Unlock"] = "1";
+    const devKey = (localStorage.getItem("devKey") || "").trim();
+    if (devKey) config.headers["X-Dev-Key"] = devKey;
   }
 
   return config;
 });
 
-// ----------------------------
-// Dev API client (dev pages only)
-// ----------------------------
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error.response) {
+      error.displayMessage = fmtApiError(error);
+      if (error.response.status === 403) showToast("Access denied.", "error");
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Dev API client (DevPanel)
 export const devApi = axios.create({
   baseURL: "",
   withCredentials: false,
@@ -51,37 +81,45 @@ export const devApi = axios.create({
 });
 
 devApi.interceptors.request.use((config) => {
-  const devKey = localStorage.getItem("devKey") || "";
-  if (devKey) config.headers["X-Dev-Key"] = devKey;
+  const devKey  = (localStorage.getItem("devKey") || "").trim();
+  const devUser = (localStorage.getItem("devUsername") || "").trim();
+
+  if (devKey) {
+    config.headers["X-Dev-Key"]     = devKey;
+    config.headers["X-Acting-Role"] = "admin";
+    config.headers["X-Username"]    = devUser || devKey;
+  }
+
+  // Dev calls are allowed anyway, but we keep it consistent:
+  if (isSeedUnlocked() && isDevSessionActive()) {
+    config.headers["X-Demo-Unlock"] = "1";
+  }
+
   return config;
 });
-
-// ----------------------------
-// Portal helpers (client-side only)
-// ----------------------------
-
-export function portalLogin({ username, role, deptCode }) {
-  const r = (role || "employee").toLowerCase();
-  localStorage.setItem("isLoggedIn", "true");
-  localStorage.setItem("username", username || "User");
-  localStorage.setItem("actingRole", r);
-
-  if (r === "employee") {
-    localStorage.setItem("deptCode", (deptCode || "").trim().toLowerCase());
-  } else {
-    localStorage.removeItem("deptCode");
-  }
-}
-
-export function portalLogout() {
-  localStorage.removeItem("isLoggedIn");
-  localStorage.removeItem("username");
-  // keep role/dept if you want convenience, or clear them:
-  // localStorage.removeItem("actingRole");
-  // localStorage.removeItem("deptCode");
-}
+/* ─────────────────────────────────────────────────────────────
+ * Portal session helpers (required by ProtectedRoute/Login/Navbar)
+ * ───────────────────────────────────────────────────────────── */
 
 export function isPortalLoggedIn() {
   return localStorage.getItem("isLoggedIn") === "true";
 }
 
+export function portalLogin({ username, role, deptCode }) {
+  const u = (username || "").trim();
+  const r = (role || "employee").toLowerCase();
+  const d = (deptCode || "").trim().toUpperCase();
+
+  if (!u) throw new Error("Username is required.");
+
+  localStorage.setItem("isLoggedIn", "true");
+  localStorage.setItem("username", u);
+  localStorage.setItem("actingRole", r);
+  localStorage.setItem("deptCode", d);
+}
+
+export function portalLogout() {
+  ["isLoggedIn", "username", "actingRole", "deptCode"].forEach((k) =>
+    localStorage.removeItem(k)
+  );
+}
