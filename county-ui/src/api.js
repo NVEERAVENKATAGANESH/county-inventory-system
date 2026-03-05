@@ -43,7 +43,7 @@ export function fmtApiError(err) {
  * - Production: VITE_API_BASE="https://county-inventory-system.onrender.com"
  */
 const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
-
+console.log("VITE_API_BASE =", API_BASE, "MODE =", import.meta.env.MODE);
 export const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
