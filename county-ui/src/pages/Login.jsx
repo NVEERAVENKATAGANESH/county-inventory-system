@@ -29,9 +29,7 @@ const css = `
   }
 
   /* Animated ambient orbs */
-  .lg-orb {
-    position: absolute; border-radius: 50%; pointer-events: none;
-  }
+  .lg-orb { position: absolute; border-radius: 50%; pointer-events: none; }
   .lg-orb1 {
     width: 700px; height: 700px; top: -260px; left: -220px;
     background: radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 60%);
@@ -218,6 +216,60 @@ const css = `
 
   @keyframes spin { to { transform: rotate(360deg); } }
   .spin { animation: spin 0.9s linear infinite; }
+
+  /* ─── Demo accounts panel ─── */
+  .lg-demo {
+    margin-top: 16px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .lg-demo-title {
+    font-size: 12px;
+    color: #9ca3af;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .lg-demo-grid { display: flex; flex-direction: column; gap: 8px; }
+  .lg-demo-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .lg-demo-meta { font-size: 13px; color: #cbd5e1; }
+  .lg-demo-meta small { display: block; color: #6b7280; margin-top: 2px; }
+  .lg-demo-btn {
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: #e5e7eb;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .lg-demo-btn:hover { background: rgba(255,255,255,0.06); }
+  .lg-devlink {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    color: #9ca3af;
+    font-size: 12.5px;
+  }
+  .lg-devlink code {
+    background: rgba(0,0,0,0.4);
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #e5e7eb;
+  }
 `;
 
 const FEATURES = [
@@ -244,6 +296,18 @@ const FEATURES = [
   },
 ];
 
+const DEMO_ACCOUNTS = [
+  { username: "countyadmin", role: "COUNTY_ADMIN", dept: "ADMIN",     password: "County123!" },
+  { username: "devuser",     role: "DEVELOPER",    dept: "DEV",       password: "County123!" },
+  { username: "facmanager",  role: "DEPT_MANAGER", dept: "FAC",      password: "County123!" },
+  { username: "facstaff",    role: "EMPLOYEE",     dept: "FAC",      password: "County123!" },
+  { username: "itadmin",     role: "DEPT_MANAGER", dept: "IT",       password: "County123!" },
+  { username: "pwstaff",     role: "EMPLOYEE",     dept: "PW",       password: "County123!" },
+  { username: "hrstaff",     role: "EMPLOYEE",     dept: "HR",       password: "County123!" },
+];
+
+const DEV_PORTAL = { url: "/_dev/login", username: "GT", password: "GMTV@123" };
+
 export default function Login() {
   const nav = useNavigate();
 
@@ -268,30 +332,83 @@ export default function Login() {
     else userRef.current?.focus();
   }, []); // eslint-disable-line
 
+  function mapDbRoleToActingRole(dbRole) {
+    const r = (dbRole || "").toUpperCase();
+    if (["COUNTY_ADMIN", "DEVELOPER", "DEPT_MANAGER"].includes(r)) return "admin";
+    return "employee";
+  }
+
+  function pickDept(data) {
+    return (
+      data?.department_code ||
+      data?.department ||
+      data?.dept_code ||
+      data?.deptCode ||
+      data?.dept ||
+      ""
+    );
+  }
+
+  function fillDemo(a) {
+    setUsername(a.username);
+    setPassword(a.password);
+    setError("");
+    setCapsWarn(false);
+    setTimeout(() => pwRef.current?.focus(), 0);
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError("");
-    if (!username.trim()) { setError("Please enter your username."); return; }
-    if (!password)        { setError("Please enter your password."); return; }
+
+    const u = username.trim();
+    if (!u)        { setError("Please enter your username."); return; }
+    if (!password) { setError("Please enter your password."); return; }
+
     setLoading(true);
+
     try {
-      const res = await fetch("/api/auth/login/", {
+      const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+      const url = API_BASE ? `${API_BASE}/api/auth/login/` : `/api/auth/login/`;
+
+      const res = await fetch(url, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ username: username.trim(), password }),
+        body:    JSON.stringify({ username: u, password }),
       });
-      const data = await res.json();
+
+      let data;
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) data = await res.json();
+      else data = { detail: await res.text() };
+
       if (!res.ok) {
-        setError(data.detail || "Login failed.");
+        setError(data?.detail || "Login failed.");
         setLoading(false);
         return;
       }
-      portalLogin({ username: data.username, role: data.role, deptCode: data.department_code });
+
+      const actingRole = mapDbRoleToActingRole(data.role);
+      const deptCode = (pickDept(data) || "").trim().toUpperCase();
+
+      if (actingRole === "employee" && !deptCode) {
+        setError("This employee account has no department assigned. Contact admin.");
+        setLoading(false);
+        return;
+      }
+
+      portalLogin({
+        username: data.username || u,
+        role: actingRole,
+        deptCode,
+      });
+
       if (rememberMe) {
-        localStorage.setItem("rememberLogin", JSON.stringify({ username: data.username }));
+        localStorage.setItem("rememberLogin", JSON.stringify({ username: data.username || u }));
       } else {
         localStorage.removeItem("rememberLogin");
       }
+
       nav("/dashboard", { replace: true });
     } catch {
       setError("Cannot reach server. Check your connection.");
@@ -311,7 +428,6 @@ export default function Login() {
           <div className="lg-orb lg-orb3" />
           <div className="lg-grid-bg" />
 
-          {/* Brand */}
           <div className="lg-brand">
             <div className="lg-brand-mark">ISSI</div>
             <div>
@@ -320,7 +436,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Hero */}
           <div className="lg-left-body">
             <div className="lg-badge">
               <span className="lg-badge-dot" />
@@ -334,7 +449,7 @@ export default function Login() {
             </div>
 
             <div className="lg-desc">
-              Manage assets, consumables, low‑stock alerts, and audit history
+              Manage assets, consumables, low-stock alerts, and audit history
               across every county department — from a single, unified platform.
             </div>
 
@@ -405,8 +520,12 @@ export default function Login() {
                     disabled={loading}
                     style={{ paddingRight: 48 }}
                   />
-                  <button type="button" className="lg-pw-eye" tabIndex={-1}
-                    onClick={() => setShowPw((v) => !v)}>
+                  <button
+                    type="button"
+                    className="lg-pw-eye"
+                    tabIndex={-1}
+                    onClick={() => setShowPw((v) => !v)}
+                  >
                     {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
@@ -438,6 +557,47 @@ export default function Login() {
                   : "Sign In →"}
               </button>
             </form>
+
+            {/* ✅ Demo accounts panel */}
+            <div className="lg-demo">
+              <div className="lg-demo-title">Demo accounts</div>
+
+              <div className="lg-demo-grid">
+                {DEMO_ACCOUNTS.map((a) => (
+                  <div className="lg-demo-row" key={a.username}>
+                    <div className="lg-demo-meta">
+                      <strong>{a.username}</strong>
+                      <small>
+                        {a.role}{a.dept ? ` • Dept ${a.dept}` : " • No dept"}
+                      </small>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="lg-demo-btn"
+                      onClick={() => fillDemo(a)}
+                      disabled={loading}
+                      title="Fill username/password"
+                    >
+                      Use
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="lg-devlink">
+                <span>Dev portal: <code>{DEV_PORTAL.url}</code></span>
+                <button
+                  type="button"
+                  className="lg-demo-btn"
+                  onClick={() => fillDemo({ username: DEV_PORTAL.username, password: DEV_PORTAL.password })}
+                  disabled={loading}
+                  title="Fill dev portal credentials"
+                >
+                  Fill Dev
+                </button>
+              </div>
+            </div>
 
             <div className="lg-tip">
               Sign in with your county-issued credentials.<br />
