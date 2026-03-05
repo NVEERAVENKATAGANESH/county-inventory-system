@@ -38,13 +38,12 @@ export function fmtApiError(err) {
 }
 
 /**
- * ✅ API base:
- * - Local dev: VITE_API_BASE=""  -> use Vite proxy (/api -> localhost:8000)
- * - Production (Vercel): set VITE_API_BASE="https://county-inventory-system.onrender.com"
+ * API base:
+ * - Local dev: VITE_API_BASE="" -> uses Vite proxy (/api -> localhost:8000)
+ * - Production: VITE_API_BASE="https://county-inventory-system.onrender.com"
  */
 const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
 
-/** Main API client (portal) */
 export const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
@@ -60,13 +59,11 @@ api.interceptors.request.use((config) => {
   config.headers["X-Username"]    = username;
   if (dept) config.headers["X-Dept-Code"] = dept;
 
-  // Seed unlock headers
   if (isSeedUnlocked() && isDevSessionActive()) {
     config.headers["X-Demo-Unlock"] = "1";
     const devKey = (localStorage.getItem("devKey") || "").trim();
     if (devKey) config.headers["X-Dev-Key"] = devKey;
   }
-
   return config;
 });
 
@@ -79,7 +76,7 @@ api.interceptors.response.use(
   }
 );
 
-/** Dev API client (DevPanel) */
+// DevPanel client (same base)
 export const devApi = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
@@ -103,10 +100,7 @@ devApi.interceptors.request.use((config) => {
   return config;
 });
 
-/* ─────────────────────────────────────────────────────────────
- * Portal session helpers
- * ───────────────────────────────────────────────────────────── */
-
+/* Portal helpers */
 export function isPortalLoggedIn() {
   return localStorage.getItem("isLoggedIn") === "true";
 }
@@ -115,7 +109,6 @@ export function portalLogin({ username, role, deptCode }) {
   const u = (username || "").trim();
   const r = (role || "employee").toLowerCase();
   const d = (deptCode || "").trim().toUpperCase();
-
   if (!u) throw new Error("Username is required.");
 
   localStorage.setItem("isLoggedIn", "true");
