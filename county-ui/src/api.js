@@ -42,7 +42,21 @@ export function fmtApiError(err) {
  * - Local dev: VITE_API_BASE="" -> uses Vite proxy (/api -> localhost:8000)
  * - Production: VITE_API_BASE="https://county-inventory-system.onrender.com"
  */
-const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+const API_BASE = (() => {
+  const raw = (import.meta.env.VITE_API_BASE || "").trim();
+
+  // Local dev: keep empty so Vite proxy handles /api → localhost:8000
+  const isLocal =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+     window.location.hostname === "127.0.0.1");
+
+  if (isLocal) return ""; // use Vite proxy
+
+  // Production/Preview: must be Render
+  return raw || "https://county-inventory-system.onrender.com";
+})();
+
 console.log("VITE_API_BASE =", API_BASE, "MODE =", import.meta.env.MODE);
 export const api = axios.create({
   baseURL: API_BASE,
