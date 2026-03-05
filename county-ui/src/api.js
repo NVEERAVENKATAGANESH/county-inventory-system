@@ -39,25 +39,23 @@ export function fmtApiError(err) {
 
 /**
  * API base:
- * - Local dev: VITE_API_BASE="" -> uses Vite proxy (/api -> localhost:8000)
- * - Production: VITE_API_BASE="https://county-inventory-system.onrender.com"
+ * - Local dev: "" (use Vite proxy)
+ * - Production/Preview: Render URL
  */
-const API_BASE = (() => {
+export const API_BASE = (() => {
   const raw = (import.meta.env.VITE_API_BASE || "").trim();
 
-  // Local dev: keep empty so Vite proxy handles /api → localhost:8000
   const isLocal =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
      window.location.hostname === "127.0.0.1");
 
-  if (isLocal) return ""; // use Vite proxy
-
-  // Production/Preview: must be Render
+  if (isLocal) return ""; // Vite proxy handles /api -> localhost:8000
   return raw || "https://county-inventory-system.onrender.com";
 })();
 
-console.log("VITE_API_BASE =", API_BASE, "MODE =", import.meta.env.MODE);
+console.log("API_BASE =", API_BASE, "MODE =", import.meta.env.MODE);
+
 export const api = axios.create({
   baseURL: API_BASE,
   withCredentials: false,
@@ -73,11 +71,13 @@ api.interceptors.request.use((config) => {
   config.headers["X-Username"]    = username;
   if (dept) config.headers["X-Dept-Code"] = dept;
 
+  // Demo unlock (only if you enabled in UI)
   if (isSeedUnlocked() && isDevSessionActive()) {
     config.headers["X-Demo-Unlock"] = "1";
     const devKey = (localStorage.getItem("devKey") || "").trim();
     if (devKey) config.headers["X-Dev-Key"] = devKey;
   }
+
   return config;
 });
 
@@ -102,7 +102,7 @@ devApi.interceptors.request.use((config) => {
   const devUser = (localStorage.getItem("devUsername") || "").trim();
 
   if (devKey) {
-    config.headers["X-Dev-Key"]     = devKey;
+    config.headers["X-Dev-Key"]     = devKey; // backend expects username here
     config.headers["X-Acting-Role"] = "admin";
     config.headers["X-Username"]    = devUser || devKey;
   }
@@ -123,6 +123,7 @@ export function portalLogin({ username, role, deptCode }) {
   const u = (username || "").trim();
   const r = (role || "employee").toLowerCase();
   const d = (deptCode || "").trim().toUpperCase();
+
   if (!u) throw new Error("Username is required.");
 
   localStorage.setItem("isLoggedIn", "true");

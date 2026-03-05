@@ -171,8 +171,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("✅ Rich demo data seeded successfully."))
         self.stdout.write(self.style.WARNING(
             "\nUsers (password: County123!):\n"
-            "  countyadmin — COUNTY_ADMIN (no dept)\n"
-            "  devuser     — DEVELOPER    (no dept) [dev panel login]\n"
+            "  countyadmin — COUNTY_ADMIN (admin)\n"
+            "  devuser     — DEVELOPER    (dev)\n"
             "  facmanager  — DEPT_MANAGER (FAC)\n"
             "  facstaff    — EMPLOYEE     (FAC) [has assets assigned]\n"
             "  itadmin     — DEPT_MANAGER (IT)\n"

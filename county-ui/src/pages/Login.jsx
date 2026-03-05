@@ -20,7 +20,6 @@ const css = `
     .lg-left { display: none !important; }
   }
 
-  /* ─── LEFT PANEL ─── */
   .lg-left {
     position: relative; background: #020818;
     border-right: 1px solid rgba(255,255,255,0.04);
@@ -28,7 +27,6 @@ const css = `
     padding: 44px 52px; overflow: hidden;
   }
 
-  /* Animated ambient orbs */
   .lg-orb { position: absolute; border-radius: 50%; pointer-events: none; }
   .lg-orb1 {
     width: 700px; height: 700px; top: -260px; left: -220px;
@@ -57,7 +55,6 @@ const css = `
     background-size: 56px 56px; pointer-events: none;
   }
 
-  /* Brand */
   .lg-brand { display: flex; align-items: center; gap: 13px; position: relative; z-index: 2; }
   .lg-brand-mark {
     width: 38px; height: 38px; border-radius: 10px;
@@ -69,7 +66,6 @@ const css = `
   .lg-brand-name { font-size: 16px; font-weight: 700; color: #e2e8f0; letter-spacing: -0.3px; }
   .lg-brand-sub  { font-size: 11px; color: #4a6fa5; letter-spacing: 0.2px; }
 
-  /* Hero area */
   .lg-left-body {
     flex: 1; display: flex; flex-direction: column; justify-content: center;
     position: relative; z-index: 2; padding: 16px 0;
@@ -100,7 +96,6 @@ const css = `
     max-width: 400px; margin-bottom: 40px; font-weight: 400;
   }
 
-  /* Feature cards */
   .lg-features { display: flex; flex-direction: column; gap: 9px; max-width: 390px; }
   .lg-feature {
     display: flex; align-items: center; gap: 13px;
@@ -118,7 +113,6 @@ const css = `
 
   .lg-left-foot { position: relative; z-index: 2; font-size: 12px; color: #3d5a7a; margin-top: 28px; }
 
-  /* ─── RIGHT PANEL ─── */
   .lg-right {
     background: #000;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -164,7 +158,6 @@ const css = `
     outline: none; width: 100%; transition: border-color 0.15s, box-shadow 0.15s;
   }
   .lg-input:focus { border-color: rgba(59,130,246,0.55); box-shadow: 0 0 0 3px rgba(59,130,246,0.09); }
-  .lg-input::placeholder { color: #1c1c1c; }
   .lg-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .lg-pw-wrap { position: relative; }
@@ -172,11 +165,11 @@ const css = `
     position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
     width: 32px; height: 32px; border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.06); background: transparent;
-    color: #2d3748; cursor: pointer;
+    color: #9ca3af; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.13s;
   }
-  .lg-pw-eye:hover { color: #9ca3af; border-color: rgba(255,255,255,0.11); background: rgba(255,255,255,0.04); }
+  .lg-pw-eye:hover { color: #e5e7eb; border-color: rgba(255,255,255,0.11); background: rgba(255,255,255,0.04); }
 
   .lg-divider { height: 1px; background: rgba(255,255,255,0.055); margin: 16px 0 14px; }
   .lg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
@@ -194,16 +187,11 @@ const css = `
     display: flex; align-items: center; justify-content: center; gap: 8px;
     transition: all 0.18s; letter-spacing: -0.2px;
   }
-  .lg-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-    box-shadow: 0 6px 32px rgba(37,99,235,0.42), 0 1px 2px rgba(0,0,0,0.5);
-    transform: translateY(-1px);
-  }
-  .lg-btn:active:not(:disabled) { transform: translateY(0); }
+  .lg-btn:hover:not(:disabled) { transform: translateY(-1px); }
   .lg-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
   .lg-tip {
-    margin-top: 20px; font-size: 13.5px; color: #4b5563;
+    margin-top: 14px; font-size: 13.5px; color: #4b5563;
     text-align: center; line-height: 1.65;
   }
   .lg-tip strong { color: #6b7280; }
@@ -217,7 +205,7 @@ const css = `
   @keyframes spin { to { transform: rotate(360deg); } }
   .spin { animation: spin 0.9s linear infinite; }
 
-  /* ─── Demo accounts panel ─── */
+  /* Demo accounts panel */
   .lg-demo {
     margin-top: 16px;
     background: rgba(255,255,255,0.03);
@@ -273,40 +261,34 @@ const css = `
 `;
 
 const FEATURES = [
-  {
-    icon: <ShieldCheck size={16} />,
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.12)",
-    name: "Role-Based Access Control",
-    desc: "County Admin, Manager & Employee permissions",
-  },
-  {
-    icon: <Bell size={16} />,
-    color: "#10b981",
-    bg: "rgba(16,185,129,0.11)",
-    name: "Real-Time Low Stock Alerts",
-    desc: "Instant visibility on critical inventory levels",
-  },
-  {
-    icon: <Archive size={16} />,
-    color: "#8b5cf6",
-    bg: "rgba(139,92,246,0.11)",
-    name: "Complete Audit Trail",
-    desc: "Every change tracked across all departments",
-  },
+  { icon: <ShieldCheck size={16} />, color: "#3b82f6", bg: "rgba(59,130,246,0.12)", name: "Role-Based Access Control", desc: "County Admin, Manager & Employee permissions" },
+  { icon: <Bell size={16} />,       color: "#10b981", bg: "rgba(16,185,129,0.11)", name: "Real-Time Low Stock Alerts", desc: "Instant visibility on critical inventory levels" },
+  { icon: <Archive size={16} />,    color: "#8b5cf6",  bg: "rgba(139,92,246,0.11)", name: "Complete Audit Trail", desc: "Every change tracked across all departments" },
 ];
 
 const DEMO_ACCOUNTS = [
-  { username: "countyadmin", role: "COUNTY_ADMIN", dept: "ADMIN",     password: "County123!" },
-  { username: "devuser",     role: "DEVELOPER",    dept: "DEV",       password: "County123!" },
-  { username: "facmanager",  role: "DEPT_MANAGER", dept: "FAC",      password: "County123!" },
-  { username: "facstaff",    role: "EMPLOYEE",     dept: "FAC",      password: "County123!" },
-  { username: "itadmin",     role: "DEPT_MANAGER", dept: "IT",       password: "County123!" },
-  { username: "pwstaff",     role: "EMPLOYEE",     dept: "PW",       password: "County123!" },
-  { username: "hrstaff",     role: "EMPLOYEE",     dept: "HR",       password: "County123!" },
+  { username: "countyadmin", role: "COUNTY_ADMIN", dept: "",    password: "County123!" },
+  { username: "devuser",     role: "DEVELOPER",    dept: "",    password: "County123!" },
+  { username: "facmanager",  role: "DEPT_MANAGER", dept: "FAC", password: "County123!" },
+  { username: "facstaff",    role: "EMPLOYEE",     dept: "FAC", password: "County123!" },
+  { username: "itadmin",     role: "DEPT_MANAGER", dept: "IT",  password: "County123!" },
+  { username: "pwstaff",     role: "EMPLOYEE",     dept: "PW",  password: "County123!" },
+  { username: "hrstaff",     role: "EMPLOYEE",     dept: "HR",  password: "County123!" },
 ];
 
-const DEV_PORTAL = { url: "/_dev/login", username: "GT", password: "GMTV@123" };
+// If you really want GT/GMTV@123, backend must also have a DEVELOPER user "GT".
+// Recommended: use devuser/County123! for dev portal.
+const DEV_PORTAL = { url: "/_dev/login", username: "devuser", password: "County123!" };
+
+function computeApiBase() {
+  const raw = (import.meta.env.VITE_API_BASE || "").trim();
+  const isLocal =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+     window.location.hostname === "127.0.0.1");
+  if (isLocal) return "";
+  return raw || "https://county-inventory-system.onrender.com";
+}
 
 export default function Login() {
   const nav = useNavigate();
@@ -368,7 +350,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+      const API_BASE = computeApiBase();
       const url = API_BASE ? `${API_BASE}/api/auth/login/` : `/api/auth/login/`;
 
       const res = await fetch(url, {
@@ -421,7 +403,6 @@ export default function Login() {
       <style>{css}</style>
       <div className="lg-root">
 
-        {/* ── LEFT PANEL ── */}
         <div className="lg-left">
           <div className="lg-orb lg-orb1" />
           <div className="lg-orb lg-orb2" />
@@ -471,7 +452,6 @@ export default function Login() {
           <div className="lg-left-foot">© 2026 International Software Systems, Inc.</div>
         </div>
 
-        {/* ── RIGHT FORM ── */}
         <div className="lg-right">
           <div className="lg-form-wrap">
             <div className="lg-form-logo">ISSI</div>
@@ -558,7 +538,7 @@ export default function Login() {
               </button>
             </form>
 
-            {/* ✅ Demo accounts panel */}
+            {/* Demo accounts */}
             <div className="lg-demo">
               <div className="lg-demo-title">Demo accounts</div>
 
